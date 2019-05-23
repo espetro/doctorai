@@ -105,9 +105,12 @@ def build_model(tparams, options, W_emb=None):
 	if len(options['timeFile']) > 0: useTime = True
 	else: useTime = False
 
+	print "hello0"
 	x = T.tensor3('x', dtype=config.floatX)
 	t = T.matrix('t', dtype=config.floatX)
 	y = T.tensor3('y', dtype=config.floatX)
+
+	print "hello1"
 	t_label = T.matrix('t_label', dtype=config.floatX)
 	mask = T.matrix('mask', dtype=config.floatX)
 	lengths = T.vector('lengths', dtype=config.floatX)
@@ -115,6 +118,7 @@ def build_model(tparams, options, W_emb=None):
 	n_timesteps = x.shape[0]
 	n_samples = x.shape[1]
 
+	print "hello2"
 	if options['embFineTune']: emb = T.tanh(T.dot(x, tparams['W_emb']) + tparams['b_emb'])
 	else: emb = T.tanh(T.dot(x, W_emb) + tparams['b_emb'])
 	if useTime:
@@ -123,7 +127,8 @@ def build_model(tparams, options, W_emb=None):
 	inputVector = emb
 	for i, hiddenDimSize in enumerate(options['hiddenDimSize']):
 		memories = gru_layer(tparams, inputVector, str(i), hiddenDimSize, mask=mask)
-		memories = dropout_layer(memories, use_noise, trng, options['dropout_rate'])
+		print "hello3"
+		# memories = dropout_layer(memories, use_noise, trng, options['dropout_rate'])
 		inputVector = memories
 
 	def softmaxStep(memory2d):
@@ -386,28 +391,33 @@ def train_doctorAI(
 		use_noise, x, y, t, t_label, mask, lengths, cost =  build_model(tparams, options)
 		grads = T.grad(cost, wrt=tparams.values())
 		f_grad_shared, f_update = adadelta(tparams, grads, x, y, mask, lengths, cost, options, t, t_label)
+
 	elif predictTime and not embFineTune:
 		print 'predicting duration, not fine-tuning code representations'
 		W_emb = theano.shared(params['W_emb'], name='W_emb')
 		use_noise, x, y, t, t_label, mask, lengths, cost =  build_model(tparams, options, W_emb)
 		grads = T.grad(cost, wrt=tparams.values())
 		f_grad_shared, f_update = adadelta(tparams, grads, x, y, mask, lengths, cost, options, t, t_label)
+
 	elif useTime and embFineTune:
 		print 'using duration information, fine-tuning code representations'
 		use_noise, x, y, t, mask, lengths, cost =  build_model(tparams, options)
 		grads = T.grad(cost, wrt=tparams.values())
 		f_grad_shared, f_update = adadelta(tparams, grads, x, y, mask, lengths, cost, options, t)
+
 	elif useTime and not embFineTune:
 		print 'using duration information, not fine-tuning code representations'
 		W_emb = theano.shared(params['W_emb'], name='W_emb')
 		use_noise, x, y, t, mask, lengths, cost =  build_model(tparams, options, W_emb)
 		grads = T.grad(cost, wrt=tparams.values())
 		f_grad_shared, f_update = adadelta(tparams, grads, x, y, mask, lengths, cost, options, t)
+
 	elif not useTime and embFineTune:
 		print 'not using duration information, fine-tuning code representations'
 		use_noise, x, y, mask, lengths, cost =  build_model(tparams, options)
 		grads = T.grad(cost, wrt=tparams.values())
 		f_grad_shared, f_update = adadelta(tparams, grads, x, y, mask, lengths, cost, options)
+
 	elif useTime and not embFineTune:
 		print 'not using duration information, not fine-tuning code representations'
 		W_emb = theano.shared(params['W_emb'], name='W_emb')
@@ -499,7 +509,7 @@ if __name__ == '__main__':
 		print 'Cannot predict time duration without time file'
 		sys.exit()
 
-	train_doctorAI(
+	model = train_doctorAI(
 		seqFile=args.seq_file, 
 		inputDimSize=args.n_input_codes, 
 		labelFile=args.label_file, 
@@ -521,3 +531,6 @@ if __name__ == '__main__':
 		logEps=args.log_eps, 
 		verbose=args.verbose
 	)
+
+	with open(args.out_file + ".model.pk", "wb") as f:
+		pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
